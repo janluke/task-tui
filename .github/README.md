@@ -42,3 +42,4 @@ Official Task releases are published on [go-task/task](https://github.com/go-tas
 | `main` | Upstream Task plus this README and the release workflow. Upstream is merged into it, so it is never rewritten. |
 
 Releases are cut by running the "Release TUI build" workflow from `main` and pointing it at the `tui` branch.
+Release notes come from [`.github/CHANGELOG-tui.md`](CHANGELOG-tui.md) on `main`, which is written by hand: the workflow publishes the section whose heading matches the tag, and stops if there is none.

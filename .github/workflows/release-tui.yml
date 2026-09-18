@@ -3,8 +3,8 @@ name: Release TUI build
 # Publishes binaries of the TUI branch from this fork. It lives on `main`,
 # because a workflow is only dispatchable from the default branch, and builds
 # the branch given as input, so the pull request branch stays free of fork-only
-# files. GoReleaser runs from the branch checkout with the configuration taken
-# from this branch.
+# files. GoReleaser runs from the branch checkout with the configuration and
+# the changelog taken from this branch.
 
 on:
   workflow_dispatch:
@@ -42,22 +42,37 @@ jobs:
           go-version: 1.27.x
           cache-dependency-path: src/go.sum
 
-      - name: Collect release metadata
+      - name: Write the release notes
         working-directory: src
         env:
+          TAG: ${{ inputs.tag }}
           SOURCE_REF: ${{ inputs.ref }}
         run: |
-          # Before tagging, so that the new tag is not what these describe.
-          base=$(git describe --tags --exclude=nightly --exclude='tui-*' HEAD)
-          previous=$(git tag --list 'tui-*' --sort=-creatordate | head -1)
-          if [ -z "$previous" ]; then
-            previous=$(git describe --tags --abbrev=0 --exclude=nightly --exclude='tui-*' HEAD)
+          changelog=../fork/.github/CHANGELOG-tui.md
+          awk -v heading="## $TAG" '
+            $0 == heading { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' "$changelog" > section.md
+          if [ ! -s section.md ] || ! grep -q '[^[:space:]]' section.md; then
+            echo "No '## $TAG' section in $(basename "$changelog")." >&2
+            echo "Add one on the main branch, then run this workflow again." >&2
+            exit 1
           fi
+          # Describe the base before tagging, so the new tag is not what it finds.
+          base=$(git describe --tags --exclude=nightly --exclude='tui-*' HEAD)
           {
-            echo "TASK_BASE=$base"
-            echo "SOURCE_REF=$SOURCE_REF"
-            echo "GORELEASER_PREVIOUS_TAG=$previous"
-          } >> "$GITHUB_ENV"
+            echo "Unofficial build of [Task](https://github.com/go-task/task) including the TUI proposed in [go-task/task#3015](https://github.com/go-task/task/pull/3015)."
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Built from | \`$SOURCE_REF\` at $(git rev-parse HEAD) |"
+            echo "| Task base | \`$base\` |"
+            cat section.md
+            echo "The binary is named \`task-tui\`, so it does not replace an installed \`task\`."
+            echo "Extract the archive for your platform and put \`task-tui\` on your \`PATH\`."
+          } > ../notes.md
+          rm section.md
 
       - name: Tag the commit to release
         working-directory: src
@@ -77,6 +92,9 @@ jobs:
           workdir: src
           # Validation is skipped because it requires the tag to be valid
           # SemVer, which `tui-v<tui version>-task-v<task version>` is not.
-          args: release --clean --skip=validate --config ../fork/.github/goreleaser-tui.yml
+          args: >-
+            release --clean --skip=validate
+            --config ../fork/.github/goreleaser-tui.yml
+            --release-notes ../notes.md
         env:
           GITHUB_TOKEN: ${{ github.token }}

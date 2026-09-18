@@ -46,38 +46,10 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# The release body comes from .github/CHANGELOG-tui.md, composed by the
+# workflow and passed with --release-notes.
 changelog:
-  use: git
-  sort: asc
-  filters:
-    exclude:
-      - '^chore'
-      - '^ci'
-      - '^build'
-      - '^test'
-      - '^refactor'
-  groups:
-    - title: Features
-      regexp: '^feat'
-      order: 0
-    - title: Fixes
-      regexp: '^fix'
-      order: 1
-    - title: Documentation
-      regexp: '^docs'
-      order: 2
-    - title: Other changes
-      order: 99
+  disable: true
 
 release:
   name_template: '{{ .Tag }}'
-  header: |
-    Unofficial build of [Task](https://github.com/go-task/task) including the TUI proposed in [go-task/task#3015](https://github.com/go-task/task/pull/3015).
-
-    | | |
-    | --- | --- |
-    | Built from | `{{ .Env.SOURCE_REF }}` at {{ .FullCommit }} |
-    | Task base | `{{ .Env.TASK_BASE }}` |
-  footer: |
-    The binary is named `task-tui`, so it does not replace an installed `task`.
-    Extract the archive for your platform and put `task-tui` on your `PATH`.
