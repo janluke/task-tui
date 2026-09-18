@@ -28,6 +28,9 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
+          # Checking out a named ref fetches no tags, and the Task version the
+          # build is based on is read with `git describe`.
+          fetch-tags: true
           path: src
 
       - name: Check out the release configuration
