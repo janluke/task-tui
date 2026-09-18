@@ -1,0 +1,83 @@
+# GoReleaser configuration for the unofficial TUI builds of this fork, used by
+# the "Release TUI build" workflow. It lives under .github/, next to the other
+# fork-only files, so that merging upstream never touches it and it is never
+# confused with the upstream .goreleaser.yml, which needs GoReleaser Pro.
+version: 2
+
+project_name: task-tui
+
+# The fork inherits upstream's moving `nightly` tag; ignoring it keeps the
+# release tag unambiguous.
+git:
+  ignore_tags:
+    - nightly
+
+builds:
+  - id: task-tui
+    binary: task-tui
+    main: ./cmd/task
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/go-task/task/v3/internal/version.version={{ .Tag }}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: task-tui
+    name_template: '{{ .Binary }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - README.md
+      - LICENSE
+      - completion/**/*
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - '^chore'
+      - '^ci'
+      - '^build'
+      - '^test'
+      - '^refactor'
+  groups:
+    - title: Features
+      regexp: '^feat'
+      order: 0
+    - title: Fixes
+      regexp: '^fix'
+      order: 1
+    - title: Documentation
+      regexp: '^docs'
+      order: 2
+    - title: Other changes
+      order: 99
+
+release:
+  name_template: '{{ .Tag }}'
+  header: |
+    Unofficial build of [Task](https://github.com/go-task/task) including the TUI proposed in [go-task/task#3015](https://github.com/go-task/task/pull/3015).
+
+    | | |
+    | --- | --- |
+    | Built from | `{{ .Env.SOURCE_REF }}` at {{ .FullCommit }} |
+    | Task base | `{{ .Env.TASK_BASE }}` |
+  footer: |
+    The binary is named `task-tui`, so it does not replace an installed `task`.
+    Extract the archive for your platform and put `task-tui` on your `PATH`.

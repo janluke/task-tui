@@ -3,7 +3,8 @@ name: Release TUI build
 # Publishes binaries of the TUI branch from this fork. It lives on `main`,
 # because a workflow is only dispatchable from the default branch, and builds
 # the branch given as input, so the pull request branch stays free of fork-only
-# files.
+# files. GoReleaser runs from the branch checkout with the configuration taken
+# from this branch.
 
 on:
   workflow_dispatch:
@@ -27,54 +28,55 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
+          path: src
+
+      - name: Check out the release configuration
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          path: fork
 
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version: 1.27.x
+          cache-dependency-path: src/go.sum
 
-      - name: Build the binaries
+      - name: Collect release metadata
+        working-directory: src
+        env:
+          SOURCE_REF: ${{ inputs.ref }}
+        run: |
+          # Before tagging, so that the new tag is not what these describe.
+          base=$(git describe --tags --exclude=nightly --exclude='tui-*' HEAD)
+          previous=$(git tag --list 'tui-*' --sort=-creatordate | head -1)
+          if [ -z "$previous" ]; then
+            previous=$(git describe --tags --abbrev=0 --exclude=nightly --exclude='tui-*' HEAD)
+          fi
+          {
+            echo "TASK_BASE=$base"
+            echo "SOURCE_REF=$SOURCE_REF"
+            echo "GORELEASER_PREVIOUS_TAG=$previous"
+          } >> "$GITHUB_ENV"
+
+      - name: Tag the commit to release
+        working-directory: src
         env:
           TAG: ${{ inputs.tag }}
         run: |
-          mkdir dist
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
-            os=${target%/*}
-            arch=${target#*/}
-            extension=""
-            if [ "$os" = windows ]; then
-              extension=".exe"
-            fi
-            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build \
-              -trimpath \
-              -ldflags "-s -w -X github.com/go-task/task/v3/internal/version.version=$TAG" \
-              -o "dist/task-tui$extension" \
-              ./cmd/task
-            tar -C dist -czf "dist/task-tui_${os}_${arch}.tar.gz" "task-tui$extension"
-            rm "dist/task-tui$extension"
-          done
-          (cd dist && sha256sum ./*.tar.gz > checksums.txt)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "refs/tags/$TAG"
 
-      - name: Publish the release
+      - name: Build and publish with GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          workdir: src
+          # Validation is skipped because it requires the tag to be valid
+          # SemVer, which `tui-v<tui version>-task-v<task version>` is not.
+          args: release --clean --skip=validate --config ../fork/.github/goreleaser-tui.yml
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
-          REF: ${{ inputs.ref }}
-        run: |
-          commit=$(git rev-parse HEAD)
-          base=$(git describe --tags --exclude=nightly HEAD)
-          cat > notes.md <<EOF
-          Unofficial build of [Task](https://github.com/go-task/task) including the TUI proposed in [go-task/task#3015](https://github.com/go-task/task/pull/3015).
-
-          | | |
-          | --- | --- |
-          | Built from | \`$REF\` at $commit |
-          | Task base | \`$base\` |
-
-          The binary is named \`task-tui\`, so it does not replace an installed \`task\`.
-          Download the archive for your platform, extract it, and put \`task-tui\` on your PATH.
-          EOF
-          gh release create "$TAG" dist/* \
-            --target "$commit" \
-            --title "$TAG" \
-            --notes-file notes.md
+          GITHUB_TOKEN: ${{ github.token }}
