@@ -62,7 +62,10 @@ jobs:
             echo "Add one on the main branch, then run this workflow again." >&2
             exit 1
           fi
-          # Describe the base before tagging, so the new tag is not what it finds.
+          # This fork carries no tags of its own, so the Task releases to
+          # describe against come from upstream. Done before tagging, so that
+          # the tag being created is not what the description finds.
+          git fetch --quiet https://github.com/go-task/task.git '+refs/tags/v*:refs/tags/v*'
           base=$(git describe --tags --exclude=nightly --exclude='tui-*' HEAD)
           {
             echo "Unofficial build of [Task](https://github.com/go-task/task) including the TUI proposed in [go-task/task#3015](https://github.com/go-task/task/pull/3015)."
@@ -72,6 +75,7 @@ jobs:
             echo "| Built from | \`$SOURCE_REF\` at $(git rev-parse HEAD) |"
             echo "| Task base | \`$base\` |"
             cat section.md
+            echo
             echo "The binary is named \`task-tui\`, so it does not replace an installed \`task\`."
             echo "Extract the archive for your platform and put \`task-tui\` on your \`PATH\`."
           } > ../notes.md
